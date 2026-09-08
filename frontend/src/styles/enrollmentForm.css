@@ -1,0 +1,256 @@
+/* Enrollment Form - Exact PDF Replica Styles */
+
+.enrollment-form-container {
+  background: white;
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 11pt;
+  line-height: 1.2;
+  color: #000;
+  max-width: 8.5in;
+  min-height: 14in;
+  margin: 0 auto;
+  padding: 0.5in;
+}
+
+.enrollment-form {
+  /* No outer border - matches original PDF */
+  padding: 0;
+}
+
+/* Underlined Input Fields */
+.underlined-input {
+  border: none;
+  border-bottom: 1px solid #000;
+  background: transparent;
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 11pt;
+  padding: 0 2px;
+  outline: none;
+}
+
+.underlined-input:focus {
+  border-bottom: 1.5px solid #000;
+}
+
+/* Checkbox with underscore */
+.checkbox-underscore {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.checkbox-underscore input[type="checkbox"] {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+}
+
+.checkbox-underscore::after {
+  content: '__';
+  letter-spacing: -2px;
+}
+
+/* Student Number Boxes */
+.student-number-boxes {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.student-number-box {
+  width: 24px;
+  height: 28px;
+  border: 1px solid #000;
+  text-align: center;
+  font-size: 14pt;
+  font-weight: bold;
+  padding: 2px;
+}
+
+/* Section Headers */
+.section-header {
+  font-style: italic;
+  font-weight: bold;
+  margin-bottom: 8px;
+  text-decoration: underline;
+}
+
+/* Bordered Sections */
+.bordered-section {
+  border: 1px solid #000;
+  padding: 10px;
+  margin-bottom: 0;
+  margin-top: -1px; /* Overlap borders to connect sections */
+}
+
+.bordered-section:first-of-type {
+  margin-top: 0;
+}
+
+/* Subject Table */
+.subject-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0;
+}
+
+.subject-table th,
+.subject-table td {
+  border: 1px solid #000;
+  padding: 4px 6px;
+  text-align: left;
+}
+
+.subject-table th {
+  font-weight: bold;
+  text-align: center;
+}
+
+.subject-table input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 11pt;
+  padding: 2px;
+}
+
+/* Signature Lines */
+.signature-line {
+  border-bottom: 1px solid #000;
+  height: 40px;
+  margin-bottom: 4px;
+}
+
+/* Footer */
+.form-footer {
+  text-align: center;
+  font-style: italic;
+  margin-top: 10px;
+  font-size: 11pt;
+}
+
+/* Print Styles */
+@media print {
+  /* Reset body for clean print */
+  body {
+    margin: 0;
+    padding: 0;
+    background: white !important;
+  }
+
+  /* Remove all screen-only elements */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Container adjustments for print */
+  .enrollment-form-container {
+    max-width: 100%;
+    width: 100%;
+    padding: 0.5in;
+    margin: 0;
+    background: white !important;
+    box-shadow: none !important;
+  }
+
+  .enrollment-form {
+    padding: 0;
+    margin: 0;
+  }
+
+  /* Ensure all borders print correctly */
+  .underlined-input {
+    border: none !important;
+    border-bottom: 1px solid #000 !important;
+    background: transparent !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .student-number-box {
+    border: 1px solid #000 !important;
+    background: white !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .bordered-section {
+    border: 1px solid #000 !important;
+    margin-bottom: 0 !important;
+    page-break-inside: avoid;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .subject-table {
+    page-break-inside: avoid;
+  }
+
+  .subject-table th,
+  .subject-table td {
+    border: 1px solid #000 !important;
+    background: white !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .signature-line {
+    border-bottom: 1px solid #000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ensure checkboxes print */
+  input[type="checkbox"] {
+    -webkit-appearance: checkbox !important;
+    appearance: checkbox !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Page setup - Legal size (8.5" x 14") */
+  @page {
+    size: legal portrait;
+    margin: 0.5in;
+  }
+
+  /* Prevent page breaks in critical sections */
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+
+  /* Force color printing */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Ensure Times New Roman prints */
+  * {
+    font-family: 'Times New Roman', Times, serif !important;
+  }
+
+  /* Remove any shadows or effects */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 768px) {
+  .enrollment-form-container {
+    padding: 0.25in;
+    font-size: 10pt;
+  }
+
+  .student-number-box {
+    width: 20px;
+    height: 24px;
+    font-size: 12pt;
+  }
+}
