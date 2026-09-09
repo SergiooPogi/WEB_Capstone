@@ -234,11 +234,11 @@ export function ARNavigation() {
                 </div>
 
                 {/* Map container with pins */}
-                <div className="relative w-full">
+                <div className="relative w-full max-h-64 overflow-hidden">
                   <img
                     src={aerialPhoto}
                     alt="Eastern Mindoro College Aerial View"
-                    className="w-full h-auto block"
+                    className="w-full h-64 object-cover block"
                     draggable={false}
                   />
 

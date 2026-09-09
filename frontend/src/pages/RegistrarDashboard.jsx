@@ -6,7 +6,7 @@ import {
   Search, ChevronDown, ChevronUp, FileText, CheckCircle2,
   RotateCcw, Calendar, ClipboardCheck, Download,
   Clock, RefreshCw, Filter, Users, UserX, UserCheck, ArrowRightLeft,
-  MoveRight, ChevronRight
+  ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -694,7 +694,6 @@ function StudentsTab() {
   const [schoolYears, setSchoolYears] = useState([]);
   const [activeYear, setActiveYear] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
-  const [transferStudent, setTransferStudent] = useState(null); // for section transfer modal
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
   const PAGE_SIZE = 10;
@@ -941,13 +940,6 @@ function StudentsTab() {
                             ) : (
                               <span className="text-xs text-gray-300 italic">finalized</span>
                             )}
-                            {/* Transfer section — only for actively enrolled students with a section */}
-                            {s.sectionId && !['dropped', 'transferred_out'].includes(s.lifeStatus) && (
-                              <button onClick={() => setTransferStudent(s)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-gray-200 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors">
-                                <MoveRight size={11} /> Transfer
-                              </button>
-                            )}
                           </div>
                         </td>
                       </tr>
@@ -987,14 +979,6 @@ function StudentsTab() {
           enrollment={selectedStudent}
           onClose={() => setSelectedStudent(null)}
           onSuccess={() => { setSelectedStudent(null); fetchStudents(); }}
-        />
-      )}
-      {transferStudent && (
-        <SectionTransferModal
-          enrollment={transferStudent}
-          currentSection={null}
-          onClose={() => setTransferStudent(null)}
-          onSuccess={() => { setTransferStudent(null); fetchStudents(); }}
         />
       )}
     </div>
@@ -1535,177 +1519,13 @@ function SSCBulkTab() {
   );
 }
 
-// ── Section Transfer Modal ────────────────────────────────────────────────────
-function SectionTransferModal({ enrollment, currentSection, onClose, onSuccess }) {
-  const [sections, setSections] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [targetId, setTargetId] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const displayName = (enrollment.firstName || enrollment.familyName)
-    ? `${enrollment.firstName || ''} ${enrollment.familyName || ''}`.trim()
-    : `Student #${enrollment.id}`;
-
-  useEffect(() => {
-    fetch(`${API}/admin/sections`, { headers: tok() })
-      .then(r => r.ok ? r.json() : [])
-      .then(data => {
-        const list = Array.isArray(data) ? data : (data.sections || []);
-        // Only show compatible sections — same course, yearLevel, schoolYear, not full, not current
-        const compatible = list.filter(s =>
-          s.isActive &&
-          s.course === enrollment.educationLevel &&
-          String(s.yearLevel) === String((enrollment.gradeLevel || '').replace(/\D/g, '')) &&
-          s.id !== enrollment.sectionId &&
-          s.currentEnrollment < s.capacity
-        );
-        setSections(compatible);
-      })
-      .catch(() => toast.error('Failed to load sections'))
-      .finally(() => setLoading(false));
-  }, [enrollment]);
-
-  async function submit(e) {
-    e.preventDefault();
-    if (!targetId) { toast.error('Please select a target section'); return; }
-    setSaving(true);
-    try {
-      const res = await fetch(`${API}/admin/sections/students/${enrollment.id}/section`, {
-        method: 'PUT',
-        headers: tok(),
-        body: JSON.stringify({ sectionId: parseInt(targetId) }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message || 'Transfer failed');
-      toast.success(`${displayName} transferred to ${data.section?.code || 'new section'}`);
-      onSuccess();
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Modal title="Transfer Student Section" onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4">
-        {/* Student info */}
-        <div className="bg-gray-50 rounded-xl px-4 py-3">
-          <p className="text-xs text-gray-500 mb-0.5">Student</p>
-          <p className="text-sm font-semibold text-[#001840]">{displayName}</p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {enrollment.educationLevel} · Grade {(enrollment.gradeLevel || '').replace(/\D/g, '')}
-            {enrollment.strand ? ` · ${enrollment.strand}` : ''}
-          </p>
-        </div>
-
-        {/* Current section */}
-        <div className="flex items-center gap-3">
-          <div className="flex-1 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-            <p className="text-[10px] font-bold text-red-600 uppercase tracking-wider mb-0.5">Current Section</p>
-            <p className="text-sm font-semibold text-red-800">{currentSection?.code || enrollment.sectionName || '—'}</p>
-            {currentSection && (
-              <p className="text-xs text-red-600 mt-0.5">
-                {currentSection.currentEnrollment}/{currentSection.capacity} enrolled
-              </p>
-            )}
-          </div>
-          <MoveRight size={20} className="text-gray-300 shrink-0" />
-          <div className="flex-1 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
-            <p className="text-[10px] font-bold text-green-600 uppercase tracking-wider mb-0.5">New Section</p>
-            {targetId ? (
-              (() => {
-                const s = sections.find(s => s.id === parseInt(targetId));
-                return s ? (
-                  <>
-                    <p className="text-sm font-semibold text-green-800">{s.code}</p>
-                    <p className="text-xs text-green-600 mt-0.5">{s.currentEnrollment}/{s.capacity} enrolled</p>
-                  </>
-                ) : <p className="text-sm text-green-600 italic">Selected</p>;
-              })()
-            ) : (
-              <p className="text-sm text-green-500 italic">Not selected yet</p>
-            )}
-          </div>
-        </div>
-
-        {/* Section picker */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Select Target Section <span className="text-red-500">*</span>
-          </label>
-          {loading ? (
-            <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
-              <RefreshCw size={13} className="animate-spin" /> Loading sections...
-            </div>
-          ) : sections.length === 0 ? (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-xs text-amber-700">
-              No compatible sections available with open slots for this student's level and grade.
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-              {sections.map(s => {
-                const pct = s.capacity ? Math.round((s.currentEnrollment / s.capacity) * 100) : 0;
-                return (
-                  <label key={s.id}
-                    className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all ${
-                      targetId === String(s.id)
-                        ? 'border-[#001840] bg-[#EEF2FF]'
-                        : 'border-gray-200 hover:border-gray-300 bg-white'
-                    }`}>
-                    <div className="flex items-center gap-3">
-                      <input type="radio" name="section" value={s.id}
-                        checked={targetId === String(s.id)}
-                        onChange={() => setTargetId(String(s.id))}
-                        className="accent-[#001840]" />
-                      <div>
-                        <p className="text-sm font-semibold text-[#001840]">{s.code}</p>
-                        <p className="text-xs text-gray-500">
-                          {s.instructor ? `Adviser: ${s.instructor}` : 'No adviser'}
-                          {s.schedule ? ` · ${s.schedule}` : ''}
-                          {s.room ? ` · ${s.room}` : ''}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className={`text-xs font-semibold ${pct >= 75 ? 'text-orange-500' : 'text-green-600'}`}>
-                        {s.currentEnrollment}/{s.capacity}
-                      </p>
-                      <div className="w-14 h-1.5 bg-gray-100 rounded-full overflow-hidden mt-1">
-                        <div className={`h-full rounded-full ${pct >= 75 ? 'bg-orange-400' : 'bg-green-400'}`}
-                          style={{ width: `${Math.min(pct, 100)}%` }} />
-                      </div>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-3 pt-1">
-          <button type="button" onClick={onClose}
-            className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-            Cancel
-          </button>
-          <button type="submit" disabled={saving || !targetId || sections.length === 0}
-            className="flex-1 px-4 py-2 bg-[#001840] text-white rounded-lg text-sm font-semibold hover:bg-[#102A71] transition-colors disabled:opacity-50">
-            {saving ? 'Transferring...' : 'Confirm Transfer'}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
 // ── Sections Tab ──────────────────────────────────────────────────────────────
 function SectionsTab() {
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);       // which section is expanded
-  const [sectionStudents, setSectionStudents] = useState({}); // { sectionId: [students] }
-  const [studentsLoading, setStudentsLoading] = useState({}); // { sectionId: bool }
-  const [transferTarget, setTransferTarget] = useState(null); // { enrollment, section }
+  const [sectionStudents, setSectionStudents] = useState({});
+  const [studentsLoading, setStudentsLoading] = useState({});
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -1735,8 +1555,6 @@ function SectionsTab() {
   }
 
   function handleTransferSuccess() {
-    setTransferTarget(null);
-    // Clear cached student lists so they refresh on next expand
     setSectionStudents({});
     setRefreshKey(k => k + 1);
   }
@@ -1826,7 +1644,7 @@ function SectionsTab() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-gray-50/60 border-b border-gray-50">
-                          {['Student', 'LRN / Student No.', 'Enrollment Type', 'Status', 'Action'].map(h => (
+                          {['Section', 'Level / Grade', 'LRN / Student No.', 'Enrollment Type', 'Status'].map(h => (
                             <th key={h} className="text-left px-5 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
                           ))}
                         </tr>
@@ -1851,15 +1669,6 @@ function SectionsTab() {
                               <td className="px-5 py-3">
                                 <LifeStatusBadge status={st.lifeStatus} />
                               </td>
-                              <td className="px-5 py-3">
-                                {!['dropped', 'transferred_out'].includes(st.lifeStatus) && (
-                                  <button
-                                    onClick={() => setTransferTarget({ enrollment: st, section: s })}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#001840] text-white rounded-lg text-xs font-medium hover:bg-[#102A71] transition-colors">
-                                    <MoveRight size={11} /> Transfer
-                                  </button>
-                                )}
-                              </td>
                             </tr>
                           );
                         })}
@@ -1871,16 +1680,6 @@ function SectionsTab() {
             </div>
           );
         })
-      )}
-
-      {/* Transfer Modal */}
-      {transferTarget && (
-        <SectionTransferModal
-          enrollment={transferTarget.enrollment}
-          currentSection={transferTarget.section}
-          onClose={() => setTransferTarget(null)}
-          onSuccess={handleTransferSuccess}
-        />
       )}
     </div>
   );

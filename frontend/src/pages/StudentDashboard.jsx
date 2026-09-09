@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { BookOpen, Clock, MapPin, User, Loader, AlertCircle, ArrowLeft } from 'lucide-react';
+import { BookOpen, Clock, MapPin, User, Loader, AlertCircle, ArrowLeft, Award, CheckCircle, XCircle } from 'lucide-react';
 
 const API = 'http://localhost:3000/api';
 const getToken = () => localStorage.getItem('token');
@@ -15,6 +15,8 @@ export function StudentDashboard() {
   const [enrolledSubjects, setEnrolledSubjects] = useState([]);
   const [totalUnits, setTotalUnits] = useState(0);
   const [adviserName, setAdviserName] = useState(null);
+  const [grades, setGrades] = useState([]);
+  const [gradesSummary, setGradesSummary] = useState(null);
 
   useEffect(() => {
     loadDashboard();
@@ -46,6 +48,18 @@ export function StudentDashboard() {
         setEnrolledSubjects(subjectsData.subjects || []);
         setTotalUnits(subjectsData.totalUnits || 0);
       }
+
+      // Get grades
+      try {
+        const gradesRes = await fetch(`${API}/enrollments/${id}/grades`, {
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (gradesRes.ok) {
+          const gradesData = await gradesRes.json();
+          setGrades(gradesData.grades || []);
+          setGradesSummary(gradesData.summary || null);
+        }
+      } catch (_) {} // grades are optional — don't fail the whole dashboard
     } catch (error) {
       console.error('Load dashboard error:', error);
       toast.error('Failed to load dashboard');
@@ -251,6 +265,101 @@ export function StudentDashboard() {
             </p>
           </div>
         </div>
+
+        {/* ── Grades Section ── */}
+        {grades.length > 0 && (
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden mt-6">
+            <div className="bg-[#FFFDF0] border-b border-gray-200 p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Award className="w-5 h-5 text-[#F5C400]" />
+                <h2 className="text-lg font-semibold text-[#001840]">My Grades</h2>
+              </div>
+              {gradesSummary && gradesSummary.gwa !== null && (
+                <div className="text-right">
+                  <p className="text-xs text-gray-500">General Weighted Average</p>
+                  <p className={`text-xl font-bold ${gradesSummary.gwa >= 75 ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {gradesSummary.gwa}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Summary chips */}
+            {gradesSummary && (
+              <div className="flex gap-3 px-4 py-3 border-b border-gray-100 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
+                  <CheckCircle className="w-3 h-3" /> Passed: {gradesSummary.passed}
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
+                  <XCircle className="w-3 h-3" /> Failed: {gradesSummary.failed}
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 text-gray-600 text-xs font-semibold rounded-full">
+                  <Clock className="w-3 h-3" /> Incomplete: {gradesSummary.incomplete}
+                </span>
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Subject</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Q1</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Q2</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Q3</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Q4</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Final</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {grades.map(g => (
+                    <tr key={g.id} className="hover:bg-[#FFFDF0] transition-colors">
+                      <td className="px-4 py-3">
+                        <p className="font-mono text-sm font-semibold text-[#102A71]">{g.subjectCode}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{g.subjectDescription}</p>
+                      </td>
+                      {['q1','q2','q3','q4'].map(q => (
+                        <td key={q} className="px-4 py-3 text-center">
+                          <span className={`text-sm font-semibold ${
+                            g[q] === null || g[q] === undefined ? 'text-gray-300' :
+                            parseFloat(g[q]) >= 75 ? 'text-emerald-600' : 'text-red-500'
+                          }`}>
+                            {g[q] !== null && g[q] !== undefined ? g[q] : '—'}
+                          </span>
+                        </td>
+                      ))}
+                      <td className="px-4 py-3 text-center">
+                        <span className={`text-sm font-bold ${
+                          g.finalGrade === null || g.finalGrade === undefined ? 'text-gray-300' :
+                          parseFloat(g.finalGrade) >= 75 ? 'text-emerald-700' : 'text-red-600'
+                        }`}>
+                          {g.finalGrade !== null && g.finalGrade !== undefined ? g.finalGrade : '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {!g.remarks || g.remarks === 'Incomplete' ? (
+                          <span className="text-xs text-gray-400 italic">Incomplete</span>
+                        ) : g.remarks === 'Passed' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">
+                            <CheckCircle className="w-3 h-3" /> Passed
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 text-xs font-bold rounded-full">
+                            <XCircle className="w-3 h-3" /> Failed
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-4 py-3 bg-gray-50/50 border-t border-gray-100 text-xs text-gray-400">
+              Grades are entered by your subject teachers. Contact the Registrar if you see any discrepancy.
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

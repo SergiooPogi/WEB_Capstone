@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import {
   BookOpen, Users, LogOut, RefreshCw, ChevronLeft,
-  GraduationCap, Search, X, FlaskConical, School
+  GraduationCap, Search, X, FlaskConical, School,
+  ClipboardList, Save, CheckCircle, AlertCircle, Lock
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -253,6 +254,297 @@ function SectionView({ section, onBack }) {
   );
 }
 
+// ── Grade Sheet ───────────────────────────────────────────────────────────────
+function GradeSheet({ cls, onBack }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState({}); // { enrollmentSubjectId_quarter: true }
+  const [edits, setEdits] = useState({});   // { `${esId}_${quarter}`: value }
+
+  const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetch(`${API}/teacher/classes/${cls.sectionId}/${encodeURIComponent(cls.subjectCode)}/grades`, { headers: tok() })
+      .then(r => r.ok ? r.json() : Promise.reject('Failed'))
+      .then(d => { setData(d); setEdits({}); })
+      .catch(() => toast.error('Failed to load grade sheet'))
+      .finally(() => setLoading(false));
+  }, [cls.sectionId, cls.subjectCode]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const openQuarters = data?.gradingPeriods
+    ? new Set(data.gradingPeriods.filter(p => p.isOpen).map(p => p.quarter))
+    : new Set();
+
+  function editKey(esId, q) { return `${esId}_${q}`; }
+
+  function handleInput(esId, quarter, value) {
+    const k = editKey(esId, quarter);
+    // Allow empty (clear) or number 0-100
+    if (value === '' || (Number(value) >= 0 && Number(value) <= 100)) {
+      setEdits(prev => ({ ...prev, [k]: value }));
+    }
+  }
+
+  async function saveGrade(esId, quarter) {
+    const k = editKey(esId, quarter);
+    const raw = edits[k];
+    if (raw === undefined) return; // nothing changed
+    const grade = raw === '' ? null : parseFloat(raw);
+
+    setSaving(prev => ({ ...prev, [k]: true }));
+    try {
+      const res = await fetch(`${API}/teacher/grades/${esId}`, {
+        method: 'PUT',
+        headers: tok(),
+        body: JSON.stringify({ quarter, grade }),
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to save');
+      toast.success(`${quarter} grade saved`);
+      // Update local data optimistically
+      setData(prev => ({
+        ...prev,
+        students: prev.students.map(s =>
+          s.enrollmentSubjectId === esId
+            ? { ...s, [quarter.toLowerCase()]: grade, finalGrade: resData.finalGrade, remarks: resData.remarks }
+            : s
+        )
+      }));
+      setEdits(prev => { const n = { ...prev }; delete n[k]; return n; });
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setSaving(prev => { const n = { ...prev }; delete n[k]; return n; });
+    }
+  }
+
+  function remarksBadge(remarks) {
+    if (!remarks || remarks === 'Incomplete') return <span className="text-xs text-gray-400 italic">Incomplete</span>;
+    if (remarks === 'Passed') return <span className="text-xs font-bold text-emerald-600">Passed</span>;
+    return <span className="text-xs font-bold text-red-500">Failed</span>;
+  }
+
+  return (
+    <div className="space-y-5">
+      <button onClick={onBack}
+        className="flex items-center gap-1.5 text-sm text-[#102A71] hover:text-[#001840] font-medium transition-colors">
+        <ChevronLeft size={16} /> Back to My Classes
+      </button>
+
+      {/* Header */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-xl font-bold text-[#001840]">{cls.subjectCode}</h2>
+            <p className="text-sm text-gray-500 mt-0.5">{cls.subjectDescription}</p>
+            <p className="text-xs text-gray-400 mt-1">
+              Section {cls.sectionName} · {cls.course} Grade {cls.yearLevel}
+              {cls.strand ? ` · ${cls.strand}` : ''}
+              {cls.schoolYear ? ` · ${cls.schoolYear}` : ''}
+            </p>
+          </div>
+          <button onClick={load}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+            <RefreshCw size={13} /> Refresh
+          </button>
+        </div>
+
+        {/* Quarter status chips */}
+        {data?.gradingPeriods && data.gradingPeriods.length > 0 && (
+          <div className="flex gap-2 mt-4 flex-wrap">
+            {QUARTERS.map(q => {
+              const period = data.gradingPeriods.find(p => p.quarter === q);
+              if (!period) return (
+                <span key={q} className="flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-400 text-xs rounded-full">
+                  <Lock size={9} /> {q} — Not set up
+                </span>
+              );
+              return (
+                <span key={q} className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded-full font-semibold ${
+                  period.isOpen ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                }`}>
+                  {period.isOpen ? <CheckCircle size={9} /> : <Lock size={9} />}
+                  {q} — {period.isOpen ? 'Open' : 'Closed'}
+                </span>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Grade table */}
+      {loading ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400 text-sm">
+          <RefreshCw size={18} className="animate-spin mx-auto mb-2" /> Loading grade sheet...
+        </div>
+      ) : !data?.students?.length ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400 text-sm">
+          <Users size={32} className="mx-auto mb-3 opacity-40" />
+          No students enrolled in this class
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/60">
+                  <th className="text-left px-5 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Student</th>
+                  {QUARTERS.map(q => (
+                    <th key={q} className="text-center px-4 py-3 text-xs font-bold uppercase tracking-wider whitespace-nowrap">
+                      <span className={openQuarters.has(q) ? 'text-emerald-600' : 'text-gray-300'}>
+                        {openQuarters.has(q) ? <CheckCircle size={10} className="inline mr-1" /> : <Lock size={10} className="inline mr-1" />}
+                        {q}
+                      </span>
+                    </th>
+                  ))}
+                  <th className="text-center px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Final</th>
+                  <th className="text-center px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Remarks</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {data.students.map((s, idx) => {
+                  const name = `${s.familyName}, ${s.firstName}${s.middleName ? ` ${s.middleName[0]}.` : ''}`;
+                  return (
+                    <tr key={s.enrollmentSubjectId} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} hover:bg-[#FFFDF0] transition-colors`}>
+                      <td className="px-5 py-3">
+                        <p className="font-semibold text-[#001840] text-sm">{name}</p>
+                        <p className="text-xs text-gray-400">{s.studentNumber || s.lrn || ''}</p>
+                      </td>
+                      {QUARTERS.map(q => {
+                        const col = q.toLowerCase();
+                        const k = editKey(s.enrollmentSubjectId, q);
+                        const isOpen = openQuarters.has(q);
+                        const isSaving = saving[k];
+                        const hasEdit = edits[k] !== undefined;
+                        const displayVal = hasEdit ? edits[k] : (s[col] !== null && s[col] !== undefined ? String(s[col]) : '');
+                        return (
+                          <td key={q} className="px-4 py-3 text-center">
+                            {isOpen ? (
+                              <div className="flex items-center gap-1 justify-center">
+                                <input
+                                  type="number"
+                                  min="0" max="100" step="0.01"
+                                  value={displayVal}
+                                  onChange={e => handleInput(s.enrollmentSubjectId, q, e.target.value)}
+                                  onBlur={() => saveGrade(s.enrollmentSubjectId, q)}
+                                  onKeyDown={e => { if (e.key === 'Enter') { e.target.blur(); } }}
+                                  placeholder="—"
+                                  className={`w-16 text-center text-sm border rounded-lg py-1.5 px-1 focus:outline-none focus:ring-2 transition-all ${
+                                    hasEdit
+                                      ? 'border-[#F5C400] focus:ring-[#F5C400]/30 bg-[#FFFDF0]'
+                                      : 'border-gray-200 focus:ring-[#102A71]/20 focus:border-[#102A71] bg-white'
+                                  }`}
+                                />
+                                {isSaving && <RefreshCw size={11} className="animate-spin text-gray-400 shrink-0" />}
+                                {hasEdit && !isSaving && (
+                                  <button onClick={() => saveGrade(s.enrollmentSubjectId, q)}
+                                    className="text-emerald-600 hover:text-emerald-700">
+                                    <Save size={11} />
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <span className={`font-semibold ${s[col] !== null && s[col] !== undefined ? 'text-[#001840]' : 'text-gray-300'}`}>
+                                {s[col] !== null && s[col] !== undefined ? s[col] : '—'}
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="px-4 py-3 text-center">
+                        <span className="font-bold text-[#001840]">
+                          {s.finalGrade !== null && s.finalGrade !== undefined ? s.finalGrade : '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {remarksBadge(s.remarks)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-5 py-3 bg-gray-50/50 border-t border-gray-50 flex items-center gap-2 text-xs text-gray-400">
+            <AlertCircle size={12} />
+            Grades auto-save on blur (click outside the field) or press Enter. Only open quarters are editable.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── My Classes View ───────────────────────────────────────────────────────────
+function MyClassesView() {
+  const [classes, setClasses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeClass, setActiveClass] = useState(null);
+
+  useEffect(() => {
+    fetch(`${API}/teacher/classes`, { headers: tok() })
+      .then(r => r.ok ? r.json() : Promise.reject('Failed'))
+      .then(data => setClasses(Array.isArray(data) ? data : []))
+      .catch(() => toast.error('Failed to load classes'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (activeClass) {
+    return <GradeSheet cls={activeClass} onBack={() => setActiveClass(null)} />;
+  }
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-xl font-bold text-[#001840]">My Classes</h2>
+        <p className="text-xs text-gray-500 mt-0.5">Select a subject to enter or view grades</p>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20 gap-2 text-gray-400 text-sm">
+          <RefreshCw size={15} className="animate-spin" /> Loading classes...
+        </div>
+      ) : classes.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+          <ClipboardList size={40} className="mx-auto mb-4 text-gray-300" />
+          <p className="text-sm font-medium text-gray-500">No subject assignments yet</p>
+          <p className="text-xs text-gray-400 mt-1">Ask admin to assign you as a teacher to subjects in sections.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {classes.map((cls, i) => (
+            <div key={`${cls.sectionId}_${cls.subjectCode}`}
+              onClick={() => setActiveClass(cls)}
+              className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 cursor-pointer hover:shadow-md hover:border-[#102A71]/30 transition-all">
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-[#001840] truncate">{cls.subjectCode}</p>
+                  <p className="text-xs text-gray-500 mt-0.5 truncate">{cls.subjectDescription}</p>
+                </div>
+                <div className="w-9 h-9 bg-[#EEF2FF] rounded-xl flex items-center justify-center shrink-0">
+                  <ClipboardList size={15} className="text-[#102A71]" />
+                </div>
+              </div>
+              <div className="space-y-1 text-xs text-gray-500">
+                <p>📚 Section <span className="font-semibold text-[#001840]">{cls.sectionName}</span></p>
+                <p>🎓 {cls.course} · Grade {cls.yearLevel}{cls.strand ? ` · ${cls.strand}` : ''}</p>
+                <p>👥 <span className="font-semibold text-[#001840]">{cls.studentCount || 0}</span> students</p>
+                {cls.schoolYear && <p>📅 {cls.schoolYear} · {cls.semester}</p>}
+              </div>
+              <div className="mt-3 pt-3 border-t border-gray-50">
+                <span className="text-xs text-[#102A71] font-semibold">Enter Grades →</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Teacher Dashboard ────────────────────────────────────────────────────
 export function TeacherDashboard() {
   const { user, isLoggedIn, loading: authLoading, logout } = useAuth();
@@ -260,6 +552,7 @@ export function TeacherDashboard() {
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState(null);
+  const [activeView, setActiveView] = useState('sections'); // 'sections' | 'classes'
 
   // Auth guard — only teachers
   useEffect(() => {
@@ -310,13 +603,20 @@ export function TeacherDashboard() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-2 py-4">
+        <nav className="flex-1 px-2 py-4 space-y-1">
           <button
-            onClick={() => setActiveSection(null)}
+            onClick={() => { setActiveView('sections'); setActiveSection(null); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
-              !activeSection ? 'bg-[#F5C400] text-[#001840] font-semibold' : 'text-white/60 hover:bg-white/10 hover:text-white'
+              activeView === 'sections' ? 'bg-[#F5C400] text-[#001840] font-semibold' : 'text-white/60 hover:bg-white/10 hover:text-white'
             }`}>
             <BookOpen size={16} /> My Sections
+          </button>
+          <button
+            onClick={() => { setActiveView('classes'); setActiveSection(null); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
+              activeView === 'classes' ? 'bg-[#F5C400] text-[#001840] font-semibold' : 'text-white/60 hover:bg-white/10 hover:text-white'
+            }`}>
+            <ClipboardList size={16} /> My Classes
           </button>
         </nav>
 
@@ -335,7 +635,7 @@ export function TeacherDashboard() {
         <header className="bg-white border-b border-gray-100 shadow-sm px-6 py-4 sticky top-0 z-20">
           <div className="flex items-center justify-between">
             <h1 className="text-base font-semibold text-[#001840]">
-              {activeSection ? `Section ${activeSection.code}` : 'My Sections'}
+              {activeView === 'classes' ? 'My Classes' : activeSection ? `Section ${activeSection.code}` : 'My Sections'}
             </h1>
             <div className="flex items-center gap-3">
               <div className="text-right">
@@ -350,7 +650,9 @@ export function TeacherDashboard() {
         </header>
 
         <main className="flex-1 p-6">
-          {activeSection ? (
+          {activeView === 'classes' ? (
+            <MyClassesView />
+          ) : activeSection ? (
             <SectionView section={activeSection} onBack={() => setActiveSection(null)} />
           ) : (
             <div className="space-y-5">

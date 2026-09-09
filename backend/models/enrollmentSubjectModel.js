@@ -67,7 +67,14 @@ export const EnrollmentSubject = sequelize.define("EnrollmentSubject", {
     type: DataTypes.STRING(100),
     allowNull: true
   },
-  
+
+  // Subject teacher (linked to user account)
+  teacherId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'FK to users table — the teacher assigned to this subject for this section'
+  },
+
   room: {
     type: DataTypes.STRING(50),
     allowNull: true
@@ -79,10 +86,42 @@ export const EnrollmentSubject = sequelize.define("EnrollmentSubject", {
     allowNull: true
   },
   
-  // Grade (after completion)
+  // Grade (after completion) — DEPRECATED single field, kept for backward compatibility
   grade: {
     type: DataTypes.STRING(5),
-    allowNull: true  // e.g., "A", "B+", "3.0"
+    allowNull: true
+  },
+
+  // ── Quarterly Grades (JHS/SHS: 4 grading periods per year) ───────────────
+  q1: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: true,
+    comment: 'Quarter 1 grade (0-100)'
+  },
+  q2: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: true,
+    comment: 'Quarter 2 grade (0-100)'
+  },
+  q3: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: true,
+    comment: 'Quarter 3 grade (0-100)'
+  },
+  q4: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: true,
+    comment: 'Quarter 4 grade (0-100)'
+  },
+  finalGrade: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: true,
+    comment: 'Auto-computed average of available quarters'
+  },
+  remarks: {
+    type: DataTypes.STRING(20),
+    allowNull: true,
+    comment: 'Passed | Failed | Incomplete'
   },
   
   // Status

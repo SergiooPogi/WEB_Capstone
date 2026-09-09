@@ -36,6 +36,7 @@ import { fileURLToPath } from "url";
 import { dirname } from "path";
 import { sequelize } from "./models/db.js";
 import "./models/enrollmentDocumentModel.js"; // ensure table is synced
+import "./models/gradingPeriodModel.js";       // ensure grading_periods table is synced
 
 // Load environment variables
 dotenv.config();
@@ -136,9 +137,13 @@ async function addMissingColumns() {
       `ALTER TABLE enrollment_records ADD COLUMN lifeStatusUpdatedBy INTEGER`,
       `ALTER TABLE enrollment_records ADD COLUMN destinationSchool VARCHAR(200)`,
       `ALTER TABLE enrollment_records ADD COLUMN sscChoiceMade INTEGER DEFAULT 0`,
-      `ALTER TABLE enrollment_records ADD COLUMN transferRequestSectionId INTEGER`,
-      `ALTER TABLE enrollment_records ADD COLUMN transferRequestReason TEXT`,
-      `ALTER TABLE enrollment_records ADD COLUMN transferRequestDate TEXT`,
+      `ALTER TABLE enrollment_subjects ADD COLUMN teacherId INTEGER`,
+      `ALTER TABLE enrollment_subjects ADD COLUMN q1 DECIMAL(5,2)`,
+      `ALTER TABLE enrollment_subjects ADD COLUMN q2 DECIMAL(5,2)`,
+      `ALTER TABLE enrollment_subjects ADD COLUMN q3 DECIMAL(5,2)`,
+      `ALTER TABLE enrollment_subjects ADD COLUMN q4 DECIMAL(5,2)`,
+      `ALTER TABLE enrollment_subjects ADD COLUMN finalGrade DECIMAL(5,2)`,
+      `ALTER TABLE enrollment_subjects ADD COLUMN remarks VARCHAR(20)`,
     ];
     for (const q of queries) {
       try {

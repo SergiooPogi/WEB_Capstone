@@ -45,6 +45,7 @@ import {
   recordSSCResult
 } from "../controllers/enrollmentController.js";
 import { requireAdminOrRegistrar } from "../middleware/auth.js";
+import { getStudentGrades } from "../controllers/gradingController.js";
 import {
   sanitizeBody,
   validateEnrollmentCreate,
@@ -209,6 +210,9 @@ router.get("/user/:userId", requireAuth, getUserEnrollments);
 // Requirements: 13.2, 13.4, 13.5, 17.2, 17.3, 17.4
 router.get("/:id/pdf", requireAuth, downloadEnrollmentPDF);
 
+// GET /api/enrollments/:id/grades - Student (or staff) views grades for this enrollment
+router.get("/:id/grades", requireAuth, getStudentGrades);
+
 // GET /api/enrollments/:id - Get single enrollment by ID
 // Requirements: 20.2
 router.get("/:id", requireAuth, getEnrollmentById);
@@ -284,91 +288,6 @@ router.put("/:id/ssc-choice", requireAuth, async (req, res) => {
 
 // DELETE /api/enrollments/:id - Delete enrollment
 router.delete("/:id", requireAuth, deleteEnrollment);
-
-// ── Section Transfer Request (student-side) ───────────────────────────────────
-
-// POST /api/enrollments/:id/transfer-request - Student requests a section transfer
-router.post("/:id/transfer-request", requireAuth, async (req, res) => {
-  try {
-    const { targetSectionId, reason } = req.body;
-    if (!targetSectionId) return res.status(400).json({ message: 'Target section is required' });
-    if (!reason?.trim()) return res.status(400).json({ message: 'Reason is required' });
-
-    const [[enrollment]] = await sequelize.query(
-      'SELECT * FROM enrollment_records WHERE id = ?',
-      { replacements: [req.params.id] }
-    );
-    if (!enrollment) return res.status(404).json({ message: 'Enrollment not found' });
-    if (enrollment.userId !== req.user.id) return res.status(403).json({ message: 'Access denied' });
-    if (!enrollment.sectionId) return res.status(400).json({ message: 'You must be assigned to a section first' });
-    if (!['enrolled', 'active', 'subjects_enrolled'].includes(enrollment.status)) {
-      return res.status(400).json({ message: 'Section transfer requests are only available for enrolled students' });
-    }
-    if (enrollment.transferRequestSectionId) {
-      return res.status(400).json({ message: 'You already have a pending transfer request. Please wait for the registrar to process it.' });
-    }
-
-    // Verify the target section exists and has capacity
-    const [[targetSection]] = await sequelize.query(
-      'SELECT * FROM sections WHERE id = ? AND isActive = 1',
-      { replacements: [targetSectionId] }
-    );
-    if (!targetSection) return res.status(404).json({ message: 'Target section not found' });
-    if (targetSection.currentEnrollment >= targetSection.capacity) {
-      return res.status(400).json({ message: `Section ${targetSection.code} is full (${targetSection.currentEnrollment}/${targetSection.capacity})` });
-    }
-    if (targetSection.id === enrollment.sectionId) {
-      return res.status(400).json({ message: 'You are already in this section' });
-    }
-
-    await sequelize.query(
-      `UPDATE enrollment_records
-       SET transferRequestSectionId = ?,
-           transferRequestReason = ?,
-           transferRequestDate = date('now'),
-           updatedAt = datetime('now')
-       WHERE id = ?`,
-      { replacements: [targetSectionId, reason.trim(), enrollment.id] }
-    );
-
-    res.json({
-      message: `Transfer request submitted to Section ${targetSection.code}. The registrar will review it shortly.`,
-      targetSection: targetSection.code
-    });
-  } catch (err) {
-    console.error('Transfer request error:', err);
-    res.status(500).json({ message: 'Failed to submit transfer request' });
-  }
-});
-
-// DELETE /api/enrollments/:id/transfer-request - Student cancels their transfer request
-router.delete("/:id/transfer-request", requireAuth, async (req, res) => {
-  try {
-    const [[enrollment]] = await sequelize.query(
-      'SELECT * FROM enrollment_records WHERE id = ?',
-      { replacements: [req.params.id] }
-    );
-    if (!enrollment) return res.status(404).json({ message: 'Enrollment not found' });
-    if (enrollment.userId !== req.user.id) return res.status(403).json({ message: 'Access denied' });
-    if (!enrollment.transferRequestSectionId) {
-      return res.status(400).json({ message: 'No pending transfer request found' });
-    }
-
-    await sequelize.query(
-      `UPDATE enrollment_records
-       SET transferRequestSectionId = NULL,
-           transferRequestReason = NULL,
-           transferRequestDate = NULL,
-           updatedAt = datetime('now')
-       WHERE id = ?`,
-      { replacements: [enrollment.id] }
-    );
-
-    res.json({ message: 'Transfer request cancelled' });
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to cancel transfer request' });
-  }
-});
 
 // ── Document upload routes ────────────────────────────────────────────────────
 // POST /api/enrollments/:id/documents - Upload credential documents

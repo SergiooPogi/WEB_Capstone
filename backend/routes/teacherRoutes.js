@@ -1,16 +1,26 @@
 import express from 'express';
 import { authenticateToken, requireTeacher } from '../middleware/auth.js';
 import { getTeacherSections, getSectionStudents } from '../controllers/teacherController.js';
+import { getTeacherClasses, getGradeSheet, saveGrade } from '../controllers/gradingController.js';
 
 const router = express.Router();
 
 router.use(authenticateToken);
 router.use(requireTeacher);
 
-// GET /api/teacher/sections — all sections assigned to this teacher
+// GET /api/teacher/sections — all sections where this teacher is the adviser
 router.get('/sections', getTeacherSections);
 
 // GET /api/teacher/sections/:id/students — students in a specific section
 router.get('/sections/:id/students', getSectionStudents);
+
+// GET /api/teacher/classes — all subject+section combos assigned to this teacher
+router.get('/classes', getTeacherClasses);
+
+// GET /api/teacher/classes/:sectionId/:subjectCode/grades — grade sheet for a subject+section
+router.get('/classes/:sectionId/:subjectCode/grades', getGradeSheet);
+
+// PUT /api/teacher/grades/:enrollmentSubjectId — save a quarterly grade
+router.put('/grades/:enrollmentSubjectId', saveGrade);
 
 export default router;

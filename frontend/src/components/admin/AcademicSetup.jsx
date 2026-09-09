@@ -75,6 +75,156 @@ function CloseSchoolYearButton() {
   );
 }
 
+// ── Grading Periods Panel ─────────────────────────────────────────────────────
+function GradingPeriodsPanel() {
+  const [periods, setPeriods] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(null);
+  const [schoolYears, setSchoolYears] = useState([]);
+  const [selectedYear, setSelectedYear] = useState('');
+
+  const QUARTER_CFG = {
+    Q1: { label: 'Quarter 1', color: 'blue' },
+    Q2: { label: 'Quarter 2', color: 'purple' },
+    Q3: { label: 'Quarter 3', color: 'orange' },
+    Q4: { label: 'Quarter 4', color: 'green' },
+  };
+
+  async function loadYears() {
+    try {
+      const res = await fetch(`${API}/academic/school-years`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setSchoolYears(data);
+        const active = data.find(sy => sy.isActive);
+        if (active) setSelectedYear(active.year);
+      }
+    } catch (_) {}
+  }
+
+  async function loadPeriods(year) {
+    if (!year) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/admin/grading-periods?schoolYear=${encodeURIComponent(year)}`, { headers: headers() });
+      const data = await res.json();
+      setPeriods(Array.isArray(data) ? data : []);
+    } catch (_) { setPeriods([]); }
+    finally { setLoading(false); }
+  }
+
+  async function setupPeriods() {
+    setActionLoading('setup');
+    try {
+      const res = await fetch(`${API}/admin/grading-periods/setup`, {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({ schoolYear: selectedYear || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      toast.success(data.message);
+      loadPeriods(selectedYear);
+    } catch (err) { toast.error(err.message); }
+    finally { setActionLoading(null); }
+  }
+
+  async function togglePeriod(period) {
+    setActionLoading(period.id);
+    const action = period.isOpen ? 'close' : 'open';
+    try {
+      const res = await fetch(`${API}/admin/grading-periods/${period.id}/${action}`, {
+        method: 'PUT', headers: headers(),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      toast.success(data.message);
+      loadPeriods(selectedYear);
+    } catch (err) { toast.error(err.message); }
+    finally { setActionLoading(null); }
+  }
+
+  useEffect(() => { loadYears(); }, []);
+  useEffect(() => { if (selectedYear) loadPeriods(selectedYear); }, [selectedYear]);
+
+  const colorMap = {
+    blue:   { bg: 'bg-blue-50',   openBorder: 'border-blue-400',   closedBorder: 'border-blue-200',   badge: 'bg-blue-500',   text: 'text-blue-700',   btn: 'bg-blue-600 hover:bg-blue-700'   },
+    purple: { bg: 'bg-purple-50', openBorder: 'border-purple-400', closedBorder: 'border-purple-200', badge: 'bg-purple-500', text: 'text-purple-700', btn: 'bg-purple-600 hover:bg-purple-700' },
+    orange: { bg: 'bg-orange-50', openBorder: 'border-orange-400', closedBorder: 'border-orange-200', badge: 'bg-orange-500', text: 'text-orange-700', btn: 'bg-orange-600 hover:bg-orange-700' },
+    green:  { bg: 'bg-green-50',  openBorder: 'border-green-400',  closedBorder: 'border-green-200',  badge: 'bg-green-500',  text: 'text-green-700',  btn: 'bg-green-600 hover:bg-green-700'  },
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="font-bold text-[#001840]">Grading Periods</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Open or close quarters to control when teachers can enter grades</p>
+        </div>
+        <div className="flex gap-2 items-center">
+          <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)}
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none bg-white">
+            <option value="">Select school year</option>
+            {schoolYears.map(sy => <option key={sy.id} value={sy.year}>{sy.year}{sy.isActive ? ' (Active)' : ''}</option>)}
+          </select>
+          {selectedYear && (
+            <button onClick={setupPeriods} disabled={actionLoading === 'setup'}
+              className="px-4 py-2 bg-[#102A71] text-white rounded-lg text-sm font-semibold hover:bg-[#001840] disabled:opacity-50 transition-colors">
+              {actionLoading === 'setup' ? 'Setting up...' : 'Setup Q1–Q4'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-700 leading-relaxed">
+        <strong>How it works:</strong> Click <em>Setup Q1–Q4</em> to create the four quarters for the selected school year.
+        Then <strong>Open</strong> a quarter when ready for grade entry, and <strong>Close</strong> it to lock grades when the period ends.
+      </div>
+
+      {!selectedYear ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 text-sm">Select a school year above</div>
+      ) : loading ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 text-sm">Loading...</div>
+      ) : periods.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+          <p className="text-gray-500 text-sm mb-3">No grading periods for {selectedYear} yet.</p>
+          <button onClick={setupPeriods} disabled={actionLoading === 'setup'}
+            className="px-4 py-2 bg-[#F5C400] text-[#001840] rounded-lg text-sm font-semibold hover:bg-[#FFDC5F] disabled:opacity-50">
+            {actionLoading === 'setup' ? 'Setting up...' : 'Setup Q1–Q4 Now'}
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {periods.map(period => {
+            const cfg = QUARTER_CFG[period.quarter] || { label: period.quarter, color: 'blue' };
+            const c = colorMap[cfg.color] || colorMap.blue;
+            const isActioning = actionLoading === period.id;
+            return (
+              <div key={period.id}
+                className={`rounded-2xl border-2 p-5 transition-all ${c.bg} ${period.isOpen ? c.openBorder : c.closedBorder}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-lg font-bold text-[#001840]">{period.quarter}</span>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full text-white ${period.isOpen ? c.badge : 'bg-gray-300'}`}>
+                    {period.isOpen ? 'Open' : 'Closed'}
+                  </span>
+                </div>
+                <p className={`text-xs font-medium mb-1 ${c.text}`}>{cfg.label}</p>
+                <p className="text-[10px] text-gray-400 mb-4">
+                  {period.isOpen && period.openedAt ? `Opened ${new Date(period.openedAt).toLocaleDateString('en-PH')}` :
+                   period.closedAt ? `Closed ${new Date(period.closedAt).toLocaleDateString('en-PH')}` : 'Not yet opened'}
+                </p>
+                <button onClick={() => togglePeriod(period)} disabled={isActioning}
+                  className={`w-full py-2 rounded-xl text-white text-xs font-bold transition-colors disabled:opacity-50 ${period.isOpen ? 'bg-red-500 hover:bg-red-600' : c.btn}`}>
+                  {isActioning ? '...' : period.isOpen ? 'Close Quarter' : 'Open Quarter'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── AcademicSetup ─────────────────────────────────────────────────────────────
 export function AcademicSetup() {
   const [tab, setTab] = useState('subjects');
@@ -181,8 +331,9 @@ export function AcademicSetup() {
   const gradeLevels = subjectForm.programCode === 'JHS' ? JHS_GRADE_LEVELS : SHS_GRADE_LEVELS;
 
   const tabs = [
-    { id: 'subjects',    label: 'Subjects',     icon: BookOpen },
-    { id: 'schoolyears', label: 'School Years', icon: Calendar },
+    { id: 'subjects',    label: 'Subjects',        icon: BookOpen },
+    { id: 'schoolyears', label: 'School Years',    icon: Calendar },
+    { id: 'grading',     label: 'Grading Periods', icon: Clock    },
   ];
 
   return (
@@ -425,6 +576,9 @@ export function AcademicSetup() {
           </div>
         </div>
       )}
+
+      {/* ── GRADING PERIODS TAB ──────────────────────────────────────────── */}
+      {tab === 'grading' && <GradingPeriodsPanel />}
     </div>
   );
 }

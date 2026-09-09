@@ -53,15 +53,18 @@ router.get('/:sectionId/available-subjects', getAvailableSubjects);
 router.post('/assign/:enrollmentId', assignStudentToSection);
 
 // GET /api/admin/sections/:id/subject-teachers
-// Returns distinct subjects in this section with their current instructor
+// Returns distinct subjects in this section with their current instructor and teacherId
 router.get('/:id/subject-teachers', async (req, res) => {
   try {
     const sectionId = parseInt(req.params.id);
     const [rows] = await sequelize.query(
-      `SELECT DISTINCT subjectCode, subjectDescription, units, instructor
-       FROM enrollment_subjects
-       WHERE sectionId = ?
-       ORDER BY subjectCode ASC`,
+      `SELECT DISTINCT es.subjectCode, es.subjectDescription, es.units,
+              es.instructor, es.teacherId,
+              u.name AS teacherName, u.email AS teacherEmail
+       FROM enrollment_subjects es
+       LEFT JOIN users u ON es.teacherId = u.id
+       WHERE es.sectionId = ?
+       ORDER BY es.subjectCode ASC`,
       { replacements: [sectionId] }
     );
     res.json(rows || []);
@@ -72,22 +75,38 @@ router.get('/:id/subject-teachers', async (req, res) => {
 });
 
 // PUT /api/admin/sections/:id/subject-teachers
-// Assigns instructor to all enrollment_subjects rows for a specific subject in this section
+// Assigns instructor (by teacherId or name) to all enrollment_subjects rows for a specific subject in this section
 router.put('/:id/subject-teachers', sanitizeBody, async (req, res) => {
   try {
     const sectionId = parseInt(req.params.id);
-    const { subjectCode, instructor } = req.body;
+    const { subjectCode, teacherId } = req.body;
     if (!subjectCode) return res.status(400).json({ error: 'subjectCode is required' });
-    if (instructor && instructor.length > 100) {
-      return res.status(400).json({ error: 'Instructor name must be 100 characters or less' });
+
+    let instructorName = null;
+    let resolvedTeacherId = teacherId ? parseInt(teacherId) : null;
+
+    if (resolvedTeacherId) {
+      // Look up teacher name from users table
+      const [[teacher]] = await sequelize.query(
+        `SELECT id, name FROM users WHERE id = ? AND role = 'teacher' AND isActive = 1 LIMIT 1`,
+        { replacements: [resolvedTeacherId] }
+      );
+      if (!teacher) return res.status(404).json({ error: 'Teacher not found or inactive' });
+      instructorName = teacher.name;
     }
+
     await sequelize.query(
       `UPDATE enrollment_subjects
-       SET instructor = ?, updatedAt = datetime('now')
+       SET instructor = ?, teacherId = ?, updatedAt = datetime('now')
        WHERE sectionId = ? AND subjectCode = ?`,
-      { replacements: [instructor || null, sectionId, subjectCode] }
+      { replacements: [instructorName, resolvedTeacherId, sectionId, subjectCode] }
     );
-    res.json({ message: `Instructor updated for ${subjectCode}` });
+
+    res.json({
+      message: `Subject ${subjectCode} assigned to ${instructorName || 'no teacher'}`,
+      instructor: instructorName,
+      teacherId: resolvedTeacherId
+    });
   } catch (err) {
     console.error('Update subject teacher error:', err);
     res.status(500).json({ error: 'Failed to update instructor' });

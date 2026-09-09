@@ -33,6 +33,10 @@ import { requireAdmin, getDashboardStats, getAllFAQs, createFAQ, updateFAQ, dele
 import { requireRegistrar, requireAdminOrRegistrar } from "../middleware/auth.js";
 import { sanitizeBody, validateLogin, validateRegister, validateFAQ } from "../middleware/validate.js";
 import { getAllTeachers, createUser, assignTeacherToSection } from "../controllers/teacherController.js";
+import {
+  getGradingPeriods, setupGradingPeriods, openGradingPeriod, closeGradingPeriod,
+  getStudentGrades, getSectionGrades
+} from "../controllers/gradingController.js";
 import enrollmentRoutes from "./enrollmentRoutes.js";
 import adminEnrollmentRoutes from "./adminEnrollmentRoutes.js";
 import registrarRoutes from "./registrarRoutes.js";
@@ -125,5 +129,14 @@ router.delete("/api/admin/academic/sections/:id", requireAdmin, deleteSection);
 router.post("/api/admin/academic/school-years", requireAdmin, createSchoolYear);
 router.put("/api/admin/academic/school-years/:id/activate", requireAdmin, setActiveSchoolYear);
 router.post("/api/admin/academic/close-school-year", requireAdmin, closeSchoolYear);
+
+// ── Grading Period API (admin) ────────────────────────────────────────────────
+router.get("/api/admin/grading-periods", requireAdmin, getGradingPeriods);
+router.post("/api/admin/grading-periods/setup", requireAdmin, setupGradingPeriods);
+router.put("/api/admin/grading-periods/:id/open", requireAdmin, openGradingPeriod);
+router.put("/api/admin/grading-periods/:id/close", requireAdmin, closeGradingPeriod);
+
+// ── Section grades view (admin/registrar) ─────────────────────────────────────
+router.get("/api/admin/sections/:sectionId/grades", requireAdminOrRegistrar, getSectionGrades);
 
 export default router;

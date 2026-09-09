@@ -5,7 +5,7 @@ import { getUserEnrollments, downloadEnrollmentPDF, deleteEnrollment } from '../
 import { 
   FileText, Download, Eye, Trash2, Plus, Upload, 
   CheckCircle, Clock, XCircle, AlertCircle, Calendar, BookOpen,
-  UserX, ArrowRightLeft, RotateCcw, FlaskConical, Loader2, MoveRight, X
+  UserX, ArrowRightLeft, RotateCcw, FlaskConical, Loader2
 } from 'lucide-react';
 
 const API = 'http://localhost:3000/api';
@@ -17,14 +17,7 @@ export function MyEnrollments() {
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  const [sscChoiceLoading, setSscChoiceLoading] = useState(null); // enrollmentId being processed
-  const [transferModal, setTransferModal] = useState(null); // enrollment object
-  const [transferSections, setTransferSections] = useState([]);
-  const [transferSectionsLoading, setTransferSectionsLoading] = useState(false);
-  const [transferTargetId, setTransferTargetId] = useState('');
-  const [transferReason, setTransferReason] = useState('');
-  const [transferSubmitting, setTransferSubmitting] = useState(false);
-  const [cancellingTransfer, setCancellingTransfer] = useState(null);
+  const [sscChoiceLoading, setSscChoiceLoading] = useState(null);
 
   async function handleSscChoice(enrollmentId, choice) {
     setSscChoiceLoading(enrollmentId);
@@ -50,73 +43,6 @@ export function MyEnrollments() {
   const [activeYear, setActiveYear] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  async function openTransferModal(enrollment) {
-    setTransferModal(enrollment);
-    setTransferTargetId('');
-    setTransferReason('');
-    setTransferSectionsLoading(true);
-    try {
-      const res = await fetch(`${API}/admin/sections`, { headers: tok() });
-      const data = await res.json();
-      const all = Array.isArray(data) ? data : (data.sections || []);
-      // Filter: same course + yearLevel, not current, not full, active
-      const gradeNum = String((enrollment.gradeLevel || '').replace(/\D/g, ''));
-      const compatible = all.filter(s =>
-        s.isActive &&
-        s.course === enrollment.educationLevel &&
-        String(s.yearLevel) === gradeNum &&
-        s.id !== enrollment.sectionId &&
-        s.currentEnrollment < s.capacity
-      );
-      setTransferSections(compatible);
-    } catch {
-      toast.error('Failed to load available sections');
-    } finally {
-      setTransferSectionsLoading(false);
-    }
-  }
-
-  async function submitTransferRequest() {
-    if (!transferTargetId) { toast.error('Please select a section'); return; }
-    if (!transferReason.trim()) { toast.error('Please provide a reason'); return; }
-    setTransferSubmitting(true);
-    try {
-      const res = await fetch(`${API}/enrollments/${transferModal.id}/transfer-request`, {
-        method: 'POST',
-        headers: tok(),
-        body: JSON.stringify({ targetSectionId: parseInt(transferTargetId), reason: transferReason }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to submit');
-      toast.success(data.message);
-      setTransferModal(null);
-      const updated = await getUserEnrollments();
-      setEnrollments(Array.isArray(updated) ? updated : (updated.enrollments || []));
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setTransferSubmitting(false);
-    }
-  }
-
-  async function cancelTransferRequest(enrollmentId) {
-    setCancellingTransfer(enrollmentId);
-    try {
-      const res = await fetch(`${API}/enrollments/${enrollmentId}/transfer-request`, {
-        method: 'DELETE', headers: tok(),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed');
-      toast.success('Transfer request cancelled');
-      const updated = await getUserEnrollments();
-      setEnrollments(Array.isArray(updated) ? updated : (updated.enrollments || []));
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setCancellingTransfer(null);
-    }
-  }
-  
   useEffect(() => {
     // Load active school year and enrollments in parallel
     Promise.all([
@@ -368,29 +294,6 @@ export function MyEnrollments() {
                               </div>
                             )}
 
-                            {/* Pending Transfer Request Banner */}
-                            {enrollment.transferRequestSectionId && (
-                              <div className="mt-3 flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-                                <MoveRight className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-                                <div className="flex-1">
-                                  <p className="text-xs font-bold text-amber-700 uppercase tracking-wide">Transfer Request Pending</p>
-                                  <p className="text-xs text-amber-600 mt-0.5">Your request is being reviewed by the Registrar.</p>
-                                  {enrollment.transferRequestReason && (
-                                    <p className="text-xs text-amber-500 mt-0.5 italic">"{enrollment.transferRequestReason}"</p>
-                                  )}
-                                </div>
-                                <button
-                                  disabled={cancellingTransfer === enrollment.id}
-                                  onClick={() => cancelTransferRequest(enrollment.id)}
-                                  className="shrink-0 text-xs text-amber-600 hover:text-red-600 font-medium flex items-center gap-1 transition-colors disabled:opacity-50">
-                                  {cancellingTransfer === enrollment.id
-                                    ? <Loader2 className="w-3 h-3 animate-spin" />
-                                    : <X className="w-3 h-3" />}
-                                  Cancel
-                                </button>
-                              </div>
-                            )}
-
                             {/* Returned remarks */}
                             {enrollment.status === 'returned' && enrollment.registrar_remarks && (
                               <div className="mt-3 flex items-start gap-2.5 bg-orange-50 border border-orange-200 rounded-lg px-4 py-2.5">
@@ -637,18 +540,6 @@ export function MyEnrollments() {
                           </button>
                         )}
                         
-                        {/* Request Section Transfer — only for enrolled students with a section and no pending request */}
-                        {['enrolled', 'active', 'subjects_enrolled'].includes(enrollment.status) &&
-                          enrollment.sectionId && !enrollment.transferRequestSectionId && (
-                          <button
-                            onClick={() => openTransferModal(enrollment)}
-                            className="flex-1 lg:flex-none px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-all font-medium flex items-center justify-center gap-2"
-                          >
-                            <MoveRight className="w-4 h-4" />
-                            Request Transfer
-                          </button>
-                        )}
-
                         <button
                           onClick={() => handleDownloadPDF(enrollment.id)}
                           className="flex-1 lg:flex-none px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all font-medium flex items-center justify-center gap-2"
